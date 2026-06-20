@@ -465,6 +465,18 @@ func (m *Model) executeSlashCommand(slashCmd, query, args string) tea.Cmd {
 			return types.ShowLaterListMsg{}
 		}
 
+	case "subscriptions":
+		m.Input.SetValue("")
+		cmd = func() tea.Msg {
+			return types.ShowSubscriptionsMsg{}
+		}
+
+	case "updates":
+		m.Input.SetValue("")
+		cmd = func() tea.Msg {
+			return types.ShowUpdatesMsg{}
+		}
+
 	case "theme":
 		if args == "" {
 			m.Input.SetValue("/theme ")

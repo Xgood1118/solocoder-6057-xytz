@@ -13,17 +13,19 @@ const GithubRepoLink = "https://github.com/xdagiz/xytz"
 type State string
 
 const (
-	StateSearchInput  = "search_input"
-	StateLoading      = "loading"
-	StateVideoList    = "video_list"
-	StateChannelList  = "channel_list"
-	StatePlaylistList = "playlist_list"
-	StateFormatList   = "format_list"
-	StateDownload     = "download"
-	StateResumeList   = "resume_list"
-	StateLaterList    = "later_list"
-	StateVideoPlaying = "video_playing"
-	StatePlaylistOpts = "playlist_opts"
+	StateSearchInput   = "search_input"
+	StateLoading       = "loading"
+	StateVideoList     = "video_list"
+	StateChannelList   = "channel_list"
+	StatePlaylistList  = "playlist_list"
+	StateFormatList    = "format_list"
+	StateDownload      = "download"
+	StateResumeList    = "resume_list"
+	StateLaterList     = "later_list"
+	StateVideoPlaying  = "video_playing"
+	StatePlaylistOpts  = "playlist_opts"
+	StateSubscriptions = "subscriptions"
+	StateUpdates       = "updates"
 )
 
 type StartSearchMsg struct {

@@ -58,6 +58,18 @@ var AllCommands = []Command{
 		HasArg:      false,
 	},
 	{
+		Name:        "subscriptions",
+		Description: "Manage your subscriptions",
+		Usage:       "/subscriptions",
+		HasArg:      false,
+	},
+	{
+		Name:        "updates",
+		Description: "View latest videos from subscriptions",
+		Usage:       "/updates",
+		HasArg:      false,
+	},
+	{
 		Name:        "theme",
 		Description: "Switch to a preset theme",
 		Usage:       "/theme <name>",

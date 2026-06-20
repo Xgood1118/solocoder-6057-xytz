@@ -18,5 +18,7 @@ func GetDefault() *Config {
 		ListCompactMode:     false,
 		JSRuntime:           "",
 		JSRuntimePath:       "",
+		SubscriptionLimit:   10,
+		AutoFetchUpdates:    true,
 	}
 }

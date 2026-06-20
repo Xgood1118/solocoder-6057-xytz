@@ -245,3 +245,88 @@ var PlayerModelKeys = PlayerKeys{
 func (k PlayerKeys) ShortHelp() []key.Binding {
 	return []key.Binding{k.Quit}
 }
+
+type subscriptionListKeys struct {
+	Enter        key.Binding
+	TogglePause  key.Binding
+	Delete       key.Binding
+	Rename       key.Binding
+	Refresh      key.Binding
+	Quit         key.Binding
+}
+
+var SubscriptionListModelKeys = subscriptionListKeys{
+	Enter: key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "view videos"),
+	),
+	TogglePause: key.NewBinding(
+		key.WithKeys("p"),
+		key.WithHelp("p", "pause/resume"),
+	),
+	Delete: key.NewBinding(
+		key.WithKeys("d"),
+		key.WithHelp("d", "unsubscribe"),
+	),
+	Rename: key.NewBinding(
+		key.WithKeys("r"),
+		key.WithHelp("r", "rename"),
+	),
+	Refresh: key.NewBinding(
+		key.WithKeys("ctrl+r"),
+		key.WithHelp("ctrl+r", "refresh"),
+	),
+	Quit: key.NewBinding(
+		key.WithKeys("q", "esc", "ctrl+c"),
+		key.WithHelp("q", "quit"),
+	),
+}
+
+func (k subscriptionListKeys) ShortHelp() []key.Binding {
+	return []key.Binding{k.Quit}
+}
+
+type updatesKeys struct {
+	Enter           key.Binding
+	Download        key.Binding
+	BatchDownload   key.Binding
+	ToggleRead      key.Binding
+	MarkAllRead     key.Binding
+	GoToChannel     key.Binding
+	Quit            key.Binding
+}
+
+var UpdatesModelKeys = updatesKeys{
+	Enter: key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "select"),
+	),
+	Download: key.NewBinding(
+		key.WithKeys("d"),
+		key.WithHelp("d", "download"),
+	),
+	BatchDownload: key.NewBinding(
+		key.WithKeys("m"),
+		key.WithHelp("m", "download all unread"),
+	),
+	ToggleRead: key.NewBinding(
+		key.WithKeys("space"),
+		key.WithHelp("space", "toggle read"),
+	),
+	MarkAllRead: key.NewBinding(
+		key.WithKeys("shift+r"),
+		key.WithHelp("R", "mark all read"),
+	),
+	GoToChannel: key.NewBinding(
+		key.WithKeys("u"),
+		key.WithHelp("u", "go to channel"),
+	),
+	Quit: key.NewBinding(
+		key.WithKeys("q", "esc", "ctrl+c"),
+		key.WithHelp("q", "quit"),
+	),
+}
+
+func (k updatesKeys) ShortHelp() []key.Binding {
+	return []key.Binding{k.Quit}
+}

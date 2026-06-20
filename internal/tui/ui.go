@@ -15,6 +15,8 @@ import (
 	"github.com/xdagiz/xytz/internal/tui/models/playlistlist"
 	"github.com/xdagiz/xytz/internal/tui/models/playlistopts"
 	"github.com/xdagiz/xytz/internal/tui/models/search"
+	"github.com/xdagiz/xytz/internal/tui/models/subscriptionlist"
+	"github.com/xdagiz/xytz/internal/tui/models/updates"
 	"github.com/xdagiz/xytz/internal/tui/models/videolist"
 	"github.com/xdagiz/xytz/internal/types"
 	"github.com/xdagiz/xytz/internal/utils"
@@ -35,6 +37,8 @@ type Model struct {
 	download          download.Model
 	player            player.Model
 	playlistOpts      playlistopts.Model
+	subscriptionlist  subscriptionlist.Model
+	updates           updates.Model
 	Spinner           spinner.Model
 	State             types.State
 	playbackOrigin    types.State
@@ -100,16 +104,18 @@ func NewModel(opts ...ModelOption) *Model {
 	downloadModel := download.NewModel()
 
 	model := &Model{
-		State:        types.StateSearchInput,
-		Spinner:      sp,
-		Search:       searchModel,
-		videolist:    videolistModel,
-		channellist:  channellist.NewModel(),
-		playlistlist: playlistlist.NewModel(),
-		formatlist:   formatlist.NewModel(),
-		download:     downloadModel,
-		player:       player.NewModel(),
-		Ctx:          appCtx,
+		State:            types.StateSearchInput,
+		Spinner:          sp,
+		Search:           searchModel,
+		videolist:        videolistModel,
+		channellist:      channellist.NewModel(),
+		playlistlist:     playlistlist.NewModel(),
+		formatlist:       formatlist.NewModel(),
+		download:         downloadModel,
+		player:           player.NewModel(),
+		subscriptionlist: subscriptionlist.NewModel(),
+		updates:          updates.NewModel(),
+		Ctx:              appCtx,
 	}
 
 	for _, opt := range opts {
@@ -132,6 +138,8 @@ func (m *Model) applyConfig(cfg *config.Config) {
 	m.videolist.ApplyConfig(cfg)
 	m.channellist.ApplyConfig(cfg)
 	m.formatlist.ApplyConfig(cfg)
+	m.subscriptionlist.ApplyConfig(cfg)
+	m.updates.ApplyConfig(cfg)
 	m.Spinner.Style = m.Spinner.Style.Foreground(styles.AccentSecondaryColor)
 }
 
@@ -249,6 +257,8 @@ func (m *Model) applyThemeToSubmodels() {
 	m.playlistlist.ApplyTheme()
 	m.formatlist.ApplyTheme()
 	m.download.ApplyTheme()
+	m.subscriptionlist.ApplyTheme()
+	m.updates.ApplyTheme()
 }
 
 type latestVersionMsg struct {

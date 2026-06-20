@@ -27,6 +27,7 @@ type Model struct {
 	CurrentQuery     string
 	IsChannelSearch  bool
 	IsPlaylistSearch bool
+	ChannelID        string
 	ChannelName      string
 	PlaylistName     string
 	PlaylistURL      string
@@ -56,6 +57,7 @@ func NewModel() Model {
 		List:             li,
 		IsChannelSearch:  false,
 		IsPlaylistSearch: false,
+		ChannelID:        "",
 		ChannelName:      "",
 		PlaylistName:     "",
 		PlaylistURL:      "",

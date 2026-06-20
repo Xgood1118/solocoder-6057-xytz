@@ -108,6 +108,7 @@ func getStatusBarText(m *Model, cfg StatusBarConfig) string {
 			binding(keys.Quit),
 			binding(keys.Back),
 			binding(keys.Enter),
+			binding(keys.Subscribe),
 		})
 
 	case types.StatePlaylistList:
@@ -115,6 +116,30 @@ func getStatusBarText(m *Model, cfg StatusBarConfig) string {
 			binding(keys.Quit),
 			binding(keys.Back),
 			binding(keys.Enter),
+			binding(keys.Subscribe),
+		})
+
+	case types.StateSubscriptions:
+		return renderHelp([]key.Binding{
+			binding(keys.Quit),
+			binding(keys.Back),
+			binding(keys.Enter),
+			binding(keys.TogglePause),
+			binding(keys.Delete),
+			binding(keys.Rename),
+			binding(keys.Refresh),
+		})
+
+	case types.StateUpdates:
+		return renderHelp([]key.Binding{
+			binding(keys.Quit),
+			binding(keys.Back),
+			binding(keys.Enter),
+			binding(keys.Download),
+			binding(keys.BatchDownload),
+			binding(keys.ToggleRead),
+			binding(keys.MarkAllRead),
+			binding(keys.GotoUploader),
 		})
 
 	case types.StateDownload:
@@ -178,6 +203,10 @@ func (m *Model) View() tea.View {
 		content = m.channellist.View()
 	case types.StatePlaylistList:
 		content = m.playlistlist.View()
+	case types.StateSubscriptions:
+		content = m.subscriptionlist.View()
+	case types.StateUpdates:
+		content = m.updates.View()
 	case types.StateVideoList:
 		content = m.videoListWithThumbnailView()
 	case types.StateFormatList:
@@ -265,6 +294,8 @@ func (m *Model) LoadingView() string {
 		loadingText = "Starting queue download..."
 	case "fetch_info":
 		loadingText = fmt.Sprintf("Loading video: %s", styles.SpinnerStyle.Render(m.player.URL))
+	case "subscriptions":
+		loadingText = "Fetching subscription updates..."
 	}
 
 	fmt.Fprintf(&s, "\n%s %s\n", m.Spinner.View(), loadingText)
@@ -328,6 +359,14 @@ type StatusKeys struct {
 	Help            key.Binding
 	GotoUploader    key.Binding
 	Save            key.Binding
+	Subscribe       key.Binding
+	TogglePause     key.Binding
+	Rename          key.Binding
+	Refresh         key.Binding
+	Download        key.Binding
+	BatchDownload   key.Binding
+	ToggleRead      key.Binding
+	MarkAllRead     key.Binding
 }
 
 func newQuitCtrlCKey() key.Binding {
@@ -388,6 +427,10 @@ func GetStatusKeys(state types.State) StatusKeys {
 		keys.GotoUploader = keymodels.VideoListModelKeys.GoToChannel
 		keys.CopyURL = keymodels.GlobalModelKeys.CopyURL
 		keys.Save = keymodels.VideoListModelKeys.SaveForLater
+		keys.Subscribe = key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "subscribe"),
+		)
 
 	case types.StateFormatList:
 		keys.Back = newBackEscBKey()
@@ -398,10 +441,35 @@ func GetStatusKeys(state types.State) StatusKeys {
 	case types.StateChannelList:
 		keys.Back = newBackEscBKey()
 		keys.Enter = keymodels.ChannelListModelKeys.Enter
+		keys.Subscribe = key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "subscribe"),
+		)
 
 	case types.StatePlaylistList:
 		keys.Back = newBackEscBKey()
 		keys.Enter = keymodels.PlaylistListModelKeys.Enter
+		keys.Subscribe = key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "subscribe"),
+		)
+
+	case types.StateSubscriptions:
+		keys.Back = newBackEscBKey()
+		keys.Enter = keymodels.SubscriptionListModelKeys.Enter
+		keys.TogglePause = keymodels.SubscriptionListModelKeys.TogglePause
+		keys.Delete = keymodels.SubscriptionListModelKeys.Delete
+		keys.Rename = keymodels.SubscriptionListModelKeys.Rename
+		keys.Refresh = keymodels.SubscriptionListModelKeys.Refresh
+
+	case types.StateUpdates:
+		keys.Back = newBackEscBKey()
+		keys.Enter = keymodels.UpdatesModelKeys.Enter
+		keys.Download = keymodels.UpdatesModelKeys.Download
+		keys.BatchDownload = keymodels.UpdatesModelKeys.BatchDownload
+		keys.ToggleRead = keymodels.UpdatesModelKeys.ToggleRead
+		keys.MarkAllRead = keymodels.UpdatesModelKeys.MarkAllRead
+		keys.GotoUploader = keymodels.UpdatesModelKeys.GoToChannel
 
 	case types.StatePlaylistOpts:
 		keys.Back = newBackEscBKey()

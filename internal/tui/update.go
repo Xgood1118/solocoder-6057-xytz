@@ -17,6 +17,8 @@ import (
 	"github.com/xdagiz/xytz/internal/tui/models/playlistlist"
 	"github.com/xdagiz/xytz/internal/tui/models/playlistopts"
 	"github.com/xdagiz/xytz/internal/tui/models/search"
+	"github.com/xdagiz/xytz/internal/tui/models/subscriptionlist"
+	"github.com/xdagiz/xytz/internal/tui/models/updates"
 	"github.com/xdagiz/xytz/internal/tui/models/videolist"
 	"github.com/xdagiz/xytz/internal/tui/theme"
 	"github.com/xdagiz/xytz/internal/types"
@@ -39,7 +41,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.InitDownloadManager()
 		m.applyRuntimeConfigAndOptions(msg.resolved.Config, m.Search.Options)
 		startCmd := m.initCommandFromOptions()
-		return m, tea.Batch(m.Spinner.Tick, m.fetchLatestVersion(), startCmd)
+
+		var fetchCmd tea.Cmd
+		if m.Ctx.Config != nil && m.Ctx.Config.AutoFetchUpdates &&
+			m.Ctx.SearchManager != nil && m.Ctx.Config != nil {
+			fetchCmd = fetchSubscriptionsCmd(m.Ctx.SearchManager, m.Ctx.Config, m.Ctx.Config.SubscriptionLimit)
+		}
+
+		return m, tea.Batch(m.Spinner.Tick, m.fetchLatestVersion(), startCmd, fetchCmd)
 
 	case runtimeInitErrMsg:
 		m.ErrMsg = msg.err.Error()
@@ -63,6 +72,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.videolist = m.videolist.HandleResize(listWidth, m.Height)
 		m.channellist = m.channellist.HandleResize(m.Width, m.Height)
 		m.playlistlist = m.playlistlist.HandleResize(m.Width, m.Height)
+		m.subscriptionlist = m.subscriptionlist.HandleResize(m.Width, m.Height)
+		m.updates = m.updates.HandleResize(m.Width, m.Height)
 		m.formatlist = m.formatlist.HandleResize(m.Width, m.Height)
 		m.download = m.download.HandleResize(m.Width, m.Height)
 		m.playlistOpts = m.playlistOpts.HandleResize(m.Width, m.Height)
@@ -106,6 +117,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Search.LaterList.Show()
 		m.transitionTo(types.StateLaterList)
 		return m, search.LoadLaterItemsCmd()
+
+	case types.ShowSubscriptionsMsg:
+		m.transitionTo(types.StateSubscriptions)
+		return m, loadSubscriptionsCmd()
+
+	case types.ShowUpdatesMsg:
+		m.transitionTo(types.StateUpdates)
+		return m, loadSubscriptionVideosCmd()
 
 	case types.StartSearchMsg:
 		if m.Ctx == nil || m.Ctx.SearchManager == nil || m.Ctx.Config == nil {
@@ -195,6 +214,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.LoadingType = "channel"
 		m.videolist.IsChannelSearch = true
 		m.videolist.IsPlaylistSearch = false
+		m.videolist.ChannelID = msg.Channel.ID
 		m.videolist.ChannelName = msg.Channel.Name
 		m.videolist.PlaylistURL = ""
 		cmd = utils.PerformChannelSearch(m.Ctx.SearchManager, m.Ctx.Config, msg.Channel.ID, m.Search.SearchLimit, m.Search.CookiesFromBrowser, m.Search.Cookies)
@@ -554,6 +574,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.transitionTo(types.StateLaterList)
 			return m, search.LoadLaterItemsCmd()
 
+		case types.StateUpdates:
+			m.transitionTo(types.StateUpdates)
+			m.downloadOrigin = ""
+			return m, loadSubscriptionVideosCmd()
+
 		case types.StateFormatList:
 			m.transitionTo(types.StateFormatList)
 			m.downloadOrigin = ""
@@ -776,6 +801,118 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, search.LoadLaterItemsCmd()
 
+	case types.SubscriptionsLoadedMsg:
+		if msg.Err != "" {
+			m.ErrMsg = msg.Err
+			return m, nil
+		}
+		if m.State == types.StateSubscriptions {
+			m.subscriptionlist.SetItems(msg.Subscriptions)
+			m.subscriptionlist.ErrMsg = ""
+		}
+		if m.State == types.StateUpdates {
+			m.updates.SetItems(msg.Videos)
+			m.updates.ErrMsg = ""
+		}
+		return m, nil
+
+	case types.AddSubscriptionMsg:
+		return m, addSubscriptionCmd(msg.Subscription)
+
+	case types.SubscriptionAddedMsg:
+		if msg.Err != "" {
+			return m, func() tea.Msg {
+				return types.ShowToastMsg{Message: fmt.Sprintf("Failed to subscribe: %s", msg.Err)}
+			}
+		}
+		toastMsg := fmt.Sprintf("Subscribed to %s", msg.Subscription.DisplayName)
+		if toastMsg == "" {
+			toastMsg = "Subscribed"
+		}
+		return m, tea.Batch(
+			func() tea.Msg { return types.ShowToastMsg{Message: toastMsg} },
+			loadSubscriptionsCmd(),
+		)
+
+	case types.RemoveSubscriptionMsg:
+		return m, removeSubscriptionCmd(msg.ID, m.Ctx)
+
+	case types.SubscriptionRemovedMsg:
+		if msg.Err != "" {
+			return m, func() tea.Msg {
+				return types.ShowToastMsg{Message: fmt.Sprintf("Failed to unsubscribe: %s", msg.Err)}
+			}
+		}
+		return m, tea.Batch(
+			func() tea.Msg { return types.ShowToastMsg{Message: "Unsubscribed"} },
+			loadSubscriptionsCmd(),
+		)
+
+	case types.ToggleSubscriptionPauseMsg:
+		return m, toggleSubscriptionPauseCmd(msg.ID)
+
+	case types.RenameSubscriptionMsg:
+		return m, renameSubscriptionCmd(msg.ID, msg.DisplayName)
+
+	case types.FetchSubscriptionsMsg:
+		if m.Ctx == nil || m.Ctx.SearchManager == nil || m.Ctx.Config == nil {
+			m.ErrMsg = "Search manager not available"
+			return m, nil
+		}
+		m.transitionTo(types.StateLoading)
+		m.LoadingType = "subscriptions"
+		return m, tea.Batch(fetchSubscriptionsCmd(m.Ctx.SearchManager, m.Ctx.Config, msg.Count), m.Spinner.Tick)
+
+	case types.FetchSubscriptionsResultMsg:
+		m.LoadingType = ""
+		if msg.Err != "" {
+			m.ErrMsg = msg.Err
+			m.subscriptionlist.ErrMsg = msg.Err
+			if m.State == types.StateLoading {
+				m.transitionTo(types.StateSubscriptions)
+			}
+			return m, nil
+		}
+		newCount := len(msg.Videos)
+		toastMsg := fmt.Sprintf("Fetched %d new videos", newCount)
+		if newCount == 1 {
+			toastMsg = "Fetched 1 new video"
+		} else if newCount == 0 {
+			toastMsg = "No new videos"
+		}
+		if m.State == types.StateLoading {
+			m.transitionTo(types.StateSubscriptions)
+		}
+		return m, tea.Batch(
+			loadSubscriptionsCmd(),
+			loadSubscriptionVideosCmd(),
+			func() tea.Msg { return types.ShowToastMsg{Message: toastMsg} },
+		)
+
+	case types.MarkVideoReadMsg:
+		return m, markVideoReadCmd(msg.VideoID)
+
+	case types.MarkAllVideosReadMsg:
+		return m, markAllVideosReadCmd(msg.SubscriptionID)
+
+	case types.UpdatesBatchDownloadMsg:
+		unread := m.updates.GetUnreadVideos()
+		if len(unread) == 0 {
+			return m, func() tea.Msg {
+				return types.ShowToastMsg{Message: "No unread videos"}
+			}
+		}
+		if m.Ctx == nil || m.Ctx.FormatsManager == nil || m.Ctx.Config == nil {
+			m.ErrMsg = "Formats manager not available"
+			return m, nil
+		}
+		m.downloadOrigin = types.StateUpdates
+		videos := make([]types.VideoItem, len(unread))
+		for i, v := range unread {
+			videos[i] = v.VideoItem
+		}
+		return m.setupAndStartQueue(videos, m.runtimeConfig().GetDefaultFormat(), false, 0, "Subscription Updates")
+
 	case types.StartLaterDownloadMsg:
 		if m.Ctx == nil || m.Ctx.DownloadManager == nil || m.Ctx.Config == nil {
 			m.ErrMsg = "Download manager not available"
@@ -939,6 +1076,44 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.videolist.UpdateListItems()
 					}
 				}
+
+			case "s":
+				if !m.videolist.List.SettingFilter() && m.videolist.ErrMsg == "" {
+					if m.videolist.IsChannelSearch && m.videolist.ChannelID != "" {
+						channelURL := utils.BuildChannelURL(m.videolist.ChannelID)
+						sub := types.Subscription{
+							ID:          "channel:" + m.videolist.ChannelID,
+							Type:        types.SubscriptionTypeChannel,
+							OriginalID:  m.videolist.ChannelID,
+							DisplayName: m.videolist.ChannelName,
+							IsPaused:    false,
+							AddedAt:     time.Now(),
+							URL:         channelURL,
+						}
+						cmd = func() tea.Msg {
+							return types.AddSubscriptionMsg{Subscription: sub}
+						}
+						return m, cmd
+					} else if m.videolist.IsPlaylistSearch && m.videolist.PlaylistURL != "" {
+						playlistID := m.videolist.PlaylistURL
+						if idx := strings.LastIndex(playlistID, "list="); idx != -1 {
+							playlistID = playlistID[idx+5:]
+						}
+						sub := types.Subscription{
+							ID:          "playlist:" + playlistID,
+							Type:        types.SubscriptionTypePlaylist,
+							OriginalID:  playlistID,
+							DisplayName: m.videolist.PlaylistName,
+							IsPaused:    false,
+							AddedAt:     time.Now(),
+							URL:         m.videolist.PlaylistURL,
+						}
+						cmd = func() tea.Msg {
+							return types.AddSubscriptionMsg{Subscription: sub}
+						}
+						return m, cmd
+					}
+				}
 			}
 			m.videolist, cmd = m.videolist.Update(msg)
 			nextThumbnailCmd := tea.Cmd(nil)
@@ -967,6 +1142,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 					return m, cmd
 				}
+
+			case "s":
+				if !m.channellist.List.SettingFilter() {
+					channel, ok := m.channellist.SelectedChannel()
+					if ok && channel.ID != "" {
+						sub := types.Subscription{
+							ID:          "channel:" + channel.ID,
+							Type:        types.SubscriptionTypeChannel,
+							OriginalID:  channel.ID,
+							DisplayName: channel.Name,
+							IsPaused:    false,
+							AddedAt:     time.Now(),
+							URL:         utils.BuildChannelURL(channel.ID),
+						}
+						cmd = func() tea.Msg {
+							return types.AddSubscriptionMsg{Subscription: sub}
+						}
+						return m, cmd
+					}
+				}
 			}
 			m.channellist, cmd = m.channellist.Update(msg)
 			return m, cmd
@@ -988,6 +1183,27 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 
 					return m, cmd
+				}
+
+			case "s":
+				if !m.playlistlist.List.SettingFilter() {
+					playlist, ok := m.playlistlist.SelectedPlaylist()
+					if ok && playlist.ID != "" {
+						playlistURL := utils.BuildPlaylistURL(playlist.ID)
+						sub := types.Subscription{
+							ID:          "playlist:" + playlist.ID,
+							Type:        types.SubscriptionTypePlaylist,
+							OriginalID:  playlist.ID,
+							DisplayName: playlist.TitleText,
+							IsPaused:    false,
+							AddedAt:     time.Now(),
+							URL:         playlistURL,
+						}
+						cmd = func() tea.Msg {
+							return types.AddSubscriptionMsg{Subscription: sub}
+						}
+						return m, cmd
+					}
 				}
 			}
 			m.playlistlist, cmd = m.playlistlist.Update(msg)
@@ -1099,6 +1315,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						target = types.StateResumeList
 					case types.StateLaterList:
 						target = types.StateLaterList
+					case types.StateUpdates:
+						target = types.StateUpdates
 					}
 					m.downloadOrigin = ""
 					return m, goBackCmd(types.StateDownload, target)
@@ -1111,6 +1329,41 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case types.StatePlaylistOpts:
 			m.playlistOpts, cmd = m.playlistOpts.Update(msg)
+			return m, cmd
+
+		case types.StateSubscriptions:
+			switch msg.String() {
+			case "esc", "b":
+				if !m.subscriptionlist.Renaming && HandleListEsc(m.subscriptionlist.List) {
+					m.subscriptionlist.List.ResetFilter()
+					return m, goBackCmd(types.StateSubscriptions, types.StateSearchInput)
+				}
+				if !m.subscriptionlist.Renaming {
+					m.subscriptionlist.List.SetFilterState(list.Unfiltered)
+				}
+			}
+			m.subscriptionlist, cmd = m.subscriptionlist.Update(msg)
+			if m.State == types.StateSubscriptions && m.subscriptionlist.ErrMsg == "" {
+				loadCmd := loadSubscriptionsCmd()
+				return m, tea.Batch(cmd, loadCmd)
+			}
+			return m, cmd
+
+		case types.StateUpdates:
+			switch msg.String() {
+			case "esc", "b":
+				if HandleListEsc(m.updates.List) {
+					m.updates.List.ResetFilter()
+					return m, goBackCmd(types.StateUpdates, types.StateSearchInput)
+				}
+				m.updates.List.SetFilterState(list.Unfiltered)
+				return m, nil
+			}
+			m.updates, cmd = m.updates.Update(msg)
+			if m.State == types.StateUpdates {
+				loadCmd := loadSubscriptionVideosCmd()
+				return m, tea.Batch(cmd, loadCmd)
+			}
 			return m, cmd
 
 		case types.StateVideoPlaying:
@@ -1142,6 +1395,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.channellist, cmd = m.channellist.Update(msg)
 		case types.StatePlaylistList:
 			m.playlistlist, cmd = m.playlistlist.Update(msg)
+		case types.StateSubscriptions:
+			m.subscriptionlist, cmd = m.subscriptionlist.Update(msg)
+		case types.StateUpdates:
+			m.updates, cmd = m.updates.Update(msg)
 		case types.StateResumeList:
 			m.Search.ResumeList, cmd = m.Search.ResumeList.Update(msg)
 		case types.StateLaterList:
@@ -1165,6 +1422,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.channellist, cmd = m.channellist.Update(msg)
 		case types.StatePlaylistList:
 			m.playlistlist, cmd = m.playlistlist.Update(msg)
+		case types.StateSubscriptions:
+			m.subscriptionlist, cmd = m.subscriptionlist.Update(msg)
+		case types.StateUpdates:
+			m.updates, cmd = m.updates.Update(msg)
 		case types.StateFormatList:
 			m.formatlist, cmd = m.formatlist.Update(msg)
 		case types.StateResumeList:
@@ -1339,6 +1600,18 @@ func (m *Model) handleGoBack(from types.State, to types.State) tea.Cmd {
 			m.Search.LaterList.List.ResetFilter()
 			m.transitionTo(types.StateSearchInput)
 
+		case types.StateSubscriptions:
+			m.State = types.StateSearchInput
+			m.ErrMsg = ""
+			m.subscriptionlist.List.ResetFilter()
+			m.subscriptionlist.List.Select(0)
+
+		case types.StateUpdates:
+			m.State = types.StateSearchInput
+			m.ErrMsg = ""
+			m.updates.List.ResetFilter()
+			m.updates.List.Select(0)
+
 		case types.StateFormatList:
 			if from == types.StateSearchInput && m.SelectedVideo.ID != "" {
 				m.State = types.StateVideoList
@@ -1396,6 +1669,12 @@ func (m *Model) handleGoBack(from types.State, to types.State) tea.Cmd {
 			m.Search.LaterList.Show()
 			m.transitionTo(types.StateLaterList)
 			return search.LoadLaterItemsCmd()
+		}
+
+	case types.StateUpdates:
+		if m.State == types.StateDownload && (m.download.Completed || m.download.Cancelled) {
+			m.transitionTo(types.StateUpdates)
+			return loadSubscriptionVideosCmd()
 		}
 	}
 
@@ -1584,5 +1863,127 @@ func saveForLaterCmd(msg types.SaveForLaterMsg) tea.Cmd {
 		}
 
 		return types.SaveForLaterResultMsg{Added: 1, Update: existed, URL: url}
+	}
+}
+
+func loadSubscriptionsCmd() tea.Cmd {
+	return func() tea.Msg {
+		state, err := utils.LoadSubscriptions()
+		if err != nil {
+			return types.SubscriptionsLoadedMsg{Err: err.Error()}
+		}
+		return types.SubscriptionsLoadedMsg{
+			Subscriptions: state.Subscriptions,
+			Videos:        state.Videos,
+		}
+	}
+}
+
+func loadSubscriptionVideosCmd() tea.Cmd {
+	return func() tea.Msg {
+		state, err := utils.LoadSubscriptions()
+		if err != nil {
+			return types.SubscriptionsLoadedMsg{Err: err.Error()}
+		}
+		return types.SubscriptionsLoadedMsg{
+			Subscriptions: state.Subscriptions,
+			Videos:        state.Videos,
+		}
+	}
+}
+
+func addSubscriptionCmd(sub types.Subscription) tea.Cmd {
+	return func() tea.Msg {
+		if err := utils.AddSubscription(sub); err != nil {
+			return types.SubscriptionAddedMsg{Err: err.Error()}
+		}
+		return types.SubscriptionAddedMsg{Subscription: sub}
+	}
+}
+
+func removeSubscriptionCmd(id string, appCtx *ctx.AppContext) tea.Cmd {
+	return func() tea.Msg {
+		if appCtx != nil && appCtx.DownloadManager != nil {
+			_ = utils.MarkSubscriptionDownloadsAbandoned(id)
+		}
+
+		if err := utils.RemoveSubscription(id); err != nil {
+			return types.SubscriptionRemovedMsg{ID: id, Err: err.Error()}
+		}
+		return types.SubscriptionRemovedMsg{ID: id}
+	}
+}
+
+func toggleSubscriptionPauseCmd(id string) tea.Cmd {
+	return func() tea.Msg {
+		if err := utils.ToggleSubscriptionPause(id); err != nil {
+			return types.SubscriptionsLoadedMsg{Err: err.Error()}
+		}
+		state, err := utils.LoadSubscriptions()
+		if err != nil {
+			return types.SubscriptionsLoadedMsg{Err: err.Error()}
+		}
+		return types.SubscriptionsLoadedMsg{
+			Subscriptions: state.Subscriptions,
+			Videos:        state.Videos,
+		}
+	}
+}
+
+func renameSubscriptionCmd(id string, displayName string) tea.Cmd {
+	return func() tea.Msg {
+		if err := utils.RenameSubscription(id, displayName); err != nil {
+			return types.SubscriptionsLoadedMsg{Err: err.Error()}
+		}
+		state, err := utils.LoadSubscriptions()
+		if err != nil {
+			return types.SubscriptionsLoadedMsg{Err: err.Error()}
+		}
+		return types.SubscriptionsLoadedMsg{
+			Subscriptions: state.Subscriptions,
+			Videos:        state.Videos,
+		}
+	}
+}
+
+func fetchSubscriptionsCmd(searchMgr *utils.ExecManager, cfg *config.Config, count int) tea.Cmd {
+	return func() tea.Msg {
+		videos, err := utils.FetchSubscriptionVideos(cfg, searchMgr, count)
+		if err != nil {
+			return types.FetchSubscriptionsResultMsg{Err: err.Error()}
+		}
+		return types.FetchSubscriptionsResultMsg{Videos: videos}
+	}
+}
+
+func markVideoReadCmd(videoID string) tea.Cmd {
+	return func() tea.Msg {
+		if err := utils.MarkVideoRead(videoID); err != nil {
+			return types.SubscriptionsLoadedMsg{Err: err.Error()}
+		}
+		state, err := utils.LoadSubscriptions()
+		if err != nil {
+			return types.SubscriptionsLoadedMsg{Err: err.Error()}
+		}
+		return types.SubscriptionsLoadedMsg{
+			Subscriptions: state.Subscriptions,
+			Videos:        state.Videos,
+		}
+	}
+}
+
+func markAllVideosReadCmd(subscriptionID string) tea.Cmd {
+	return func() tea.Msg {
+		if err := utils.MarkAllVideosRead(subscriptionID); err != nil {
+			return types.SubscriptionsLoadedMsg{Err: err.Error()}
+		}
+		state, err := utils.LoadSubscriptions()
+		if err != nil {
+			return types.SubscriptionsLoadedMsg{Err: err.Error()}
+		}
+		return types.SubscriptionsLoadedMsg{
+			Subscriptions: state.Subscriptions,
+			Videos:        state.Videos,
+		}
 	}
 }

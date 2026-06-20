@@ -51,6 +51,8 @@ type Config struct {
 	Theme               string `yaml:"theme,omitempty"`
 	JSRuntime           string `yaml:"js_runtime"`
 	JSRuntimePath       string `yaml:"js_runtime_path"`
+	SubscriptionLimit   int    `yaml:"subscription_limit"`
+	AutoFetchUpdates    bool   `yaml:"auto_fetch_updates"`
 }
 
 var GetConfigDir = func() string {
@@ -195,6 +197,10 @@ func (c *Config) applyDefaults() {
 	if c.ThumbnailTimeoutMS == 0 {
 		c.ThumbnailTimeoutMS = defaults.ThumbnailTimeoutMS
 	}
+
+	if c.SubscriptionLimit == 0 {
+		c.SubscriptionLimit = defaults.SubscriptionLimit
+	}
 }
 
 func yamlHasTopLevelKey(data []byte, key string) bool {
@@ -278,6 +284,10 @@ func (c *Config) validate() error {
 
 	if c.ThumbnailTimeoutMS < 250 {
 		return fmt.Errorf("thumbnail_timeout_ms must be at least 250")
+	}
+
+	if c.SubscriptionLimit <= 0 {
+		return fmt.Errorf("subscription_limit must be greater than 0")
 	}
 
 	if c.JSRuntime != "" {
