@@ -1573,6 +1573,10 @@ func (m *Model) handleGoBack(from types.State, to types.State) tea.Cmd {
 			m.clearSelections()
 			m.videolist.ErrMsg = ""
 			m.videolist.PlaylistURL = ""
+			m.videolist.ChannelID = ""
+			m.videolist.ChannelName = ""
+			m.videolist.IsChannelSearch = false
+			m.videolist.IsPlaylistSearch = false
 			m.videolist.List.ResetFilter()
 			m.videolist.List.Select(0)
 

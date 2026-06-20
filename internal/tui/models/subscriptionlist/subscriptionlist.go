@@ -105,8 +105,7 @@ func NewModel() Model {
 
 	renameInput := textinput.New()
 	renameInput.Placeholder = "Enter new name..."
-	renameInput.CharLimit = 100
-	renameInput.Width = 50
+	renameInput.SetWidth(50)
 
 	return Model{
 		List:          li,
@@ -178,6 +177,11 @@ func (m Model) HandleResize(w, h int) Model {
 	m.Width = w
 	m.Height = h
 	m.List.SetSize(w, h-5)
+	if w > 10 {
+		m.RenameInput.SetWidth(w - 10)
+	} else {
+		m.RenameInput.SetWidth(w)
+	}
 	return m
 }
 
