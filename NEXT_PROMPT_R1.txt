@@ -1,0 +1,1 @@
+项目完全跑不起来——go build 直接报错，subscriptionlist.go 里给 renameInput.Width 赋了个不存在的字段，编译器不认。检查修复一下。
